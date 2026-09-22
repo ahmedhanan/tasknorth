@@ -4,4 +4,4 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
-alembic/versions/*.py
+# alembic/versions tracked in git

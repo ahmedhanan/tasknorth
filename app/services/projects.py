@@ -8,8 +8,16 @@ from app.models.project import Project
 from app.schemas.project import ProjectCreate, ProjectUpdate
 
 
-async def list_projects(db: AsyncSession, user_id: uuid.UUID) -> list[Project]:
-    result = await db.execute(select(Project).where(Project.user_id == user_id))
+async def list_projects(
+    db: AsyncSession, user_id: uuid.UUID, limit: int = 50, offset: int = 0
+) -> list[Project]:
+    result = await db.execute(
+        select(Project)
+        .where(Project.user_id == user_id)
+        .order_by(Project.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
     return list(result.scalars().all())
 
 

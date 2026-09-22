@@ -1,3 +1,4 @@
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -43,3 +44,7 @@ def decode_refresh_token(token: str) -> uuid.UUID:
         return uuid.UUID(payload["sub"])
     except (JWTError, KeyError, ValueError) as exc:
         raise ValueError("invalid refresh token") from exc
+
+
+def generate_mcp_api_key() -> str:
+    return secrets.token_urlsafe(32)

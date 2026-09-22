@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,18 +15,35 @@ router = APIRouter(prefix="/calendar", tags=["calendar"])
 
 
 @router.get("/connect")
-async def connect_google():
-    auth_url = cal_svc.get_auth_url()
-    return RedirectResponse(url=auth_url)
+async def connect_google(user: Annotated[User, Depends(get_current_user)]):
+    auth_url, state = cal_svc.get_auth_url(str(user.id))
+    response = RedirectResponse(url=auth_url)
+    response.set_cookie("oauth_state", state, httponly=True, max_age=600, samesite="lax")
+    return response
 
 
 @router.get("/callback")
 async def google_callback(
     code: str,
-    user: Annotated[User, Depends(get_current_user)],
+    state: str,
+    response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    import uuid as _uuid
+
+    from sqlalchemy import select
+
+    from app.models.user import User as UserModel
+
+    user_id_str = cal_svc.verify_oauth_state(state)
+    result = await db.execute(select(UserModel).where(UserModel.id == _uuid.UUID(user_id_str)))
+    user = result.scalar_one_or_none()
+    if user is None:
+        from fastapi import HTTPException, status
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
     await cal_svc.exchange_code(db, user, code)
+    response.delete_cookie("oauth_state")
     return {"detail": "Google Calendar connected successfully"}
 
 

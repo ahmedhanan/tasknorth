@@ -1,7 +1,8 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query
+from fastapi import status as http_status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
@@ -17,11 +18,13 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 async def list_projects(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
 ):
-    return await svc.list_projects(db, user.id)
+    return await svc.list_projects(db, user.id, limit=limit, offset=offset)
 
 
-@router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ProjectResponse, status_code=http_status.HTTP_201_CREATED)
 async def create_project(
     body: ProjectCreate,
     user: Annotated[User, Depends(get_current_user)],
@@ -49,7 +52,7 @@ async def update_project(
     return await svc.update_project(db, user.id, project_id, body)
 
 
-@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{project_id}", status_code=http_status.HTTP_204_NO_CONTENT)
 async def delete_project(
     project_id: uuid.UUID,
     user: Annotated[User, Depends(get_current_user)],

@@ -1,12 +1,21 @@
+import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import get_current_user
 from app.database import get_db
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse
+from app.schemas.auth import (
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    RotateMcpKeyResponse,
+    TokenResponse,
+    UserResponse,
+)
 from app.services.auth import (
     create_access_token,
     create_refresh_token,
@@ -62,3 +71,18 @@ async def refresh(body: RefreshRequest, db: Annotated[AsyncSession, Depends(get_
         refresh_token=create_refresh_token(user.id),
         mcp_api_key=user.mcp_api_key,
     )
+
+
+@router.get("/me", response_model=UserResponse)
+async def me(user: Annotated[User, Depends(get_current_user)]):
+    return user
+
+
+@router.post("/rotate-mcp-key", response_model=RotateMcpKeyResponse)
+async def rotate_mcp_key(
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    user.mcp_api_key = secrets.token_urlsafe(32)
+    await db.commit()
+    return RotateMcpKeyResponse(mcp_api_key=user.mcp_api_key)

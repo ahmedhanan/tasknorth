@@ -11,12 +11,11 @@ from app.models.task import Task, TaskPriority, TaskStatus
 from app.schemas.task import TaskCreate, TaskUpdate
 
 
-def _task_query(user_id: uuid.UUID):
-    return (
-        select(Task)
-        .where(Task.user_id == user_id)
-        .options(selectinload(Task.tags))
-    )
+def _task_query(user_id: uuid.UUID, load_tags: bool = True):
+    q = select(Task).where(Task.user_id == user_id)
+    if load_tags:
+        q = q.options(selectinload(Task.tags))
+    return q
 
 
 async def list_tasks(
@@ -28,9 +27,12 @@ async def list_tasks(
     priority: TaskPriority | None = None,
     tag_name: str | None = None,
     due_before: datetime | None = None,
+    due_after: datetime | None = None,
     search: str | None = None,
     parent_id: uuid.UUID | None = None,
     top_level_only: bool = False,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[Task]:
     q = _task_query(user_id)
     if project_id:
@@ -41,6 +43,8 @@ async def list_tasks(
         q = q.where(Task.priority == priority)
     if due_before:
         q = q.where(Task.due_date <= due_before)
+    if due_after:
+        q = q.where(Task.due_date >= due_after)
     if search:
         q = q.where(or_(Task.title.ilike(f"%{search}%"), Task.description.ilike(f"%{search}%")))
     if parent_id is not None:
@@ -48,7 +52,8 @@ async def list_tasks(
     elif top_level_only:
         q = q.where(Task.parent_task_id.is_(None))
     if tag_name:
-        q = q.join(Task.tags).where(Tag.name == tag_name)
+        q = q.join(Task.tags).where(Tag.name == tag_name).distinct()
+    q = q.order_by(Task.created_at.desc()).limit(limit).offset(offset)
     result = await db.execute(q)
     return list(result.scalars().all())
 
@@ -104,6 +109,14 @@ async def update_task(
 async def complete_task(db: AsyncSession, user_id: uuid.UUID, task_id: uuid.UUID) -> Task:
     task = await get_task(db, user_id, task_id)
     task.status = TaskStatus.done
+    await db.commit()
+    await db.refresh(task, ["tags"])
+    return task
+
+
+async def cancel_task(db: AsyncSession, user_id: uuid.UUID, task_id: uuid.UUID) -> Task:
+    task = await get_task(db, user_id, task_id)
+    task.status = TaskStatus.cancelled
     await db.commit()
     await db.refresh(task, ["tags"])
     return task
